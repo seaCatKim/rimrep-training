@@ -151,8 +151,8 @@ Here, we will use data collected at **Hayman Island** and **Heron Island** as an
 
 ```{r site_coords}
 sites_coords <- sites %>% 
-  #Using random site as example
-  filter(site %in% c("Hayman Island", "Heron Island")) %>% 
+  #filter GBR region bounding box
+  filter(lat < -7, lat > -25, lon > 142, lon < 155) %>% 
   #Extracting latitude and longitude coordinates
   select(site, lon, lat, deployment_location)
 
@@ -183,6 +183,7 @@ sites_mmtemp <- sites_temp %>%
   group_by(year, month, site, deployment_location, lon, lat) %>%
   #Calculating monthly means for temperature at each site
   summarise(temp_monthly_mean = round(mean(qc_val, na.rm = TRUE), 2),
+            temp_sd = sd(qc_val, na.rm = TRUE),
             #Total number of observations used in monthly mean calculations
             tot_obs = n()) %>%
   #Arranging in chronological order
@@ -192,21 +193,48 @@ sites_mmtemp <- sites_temp %>%
 head(sites_mmtemp)
 ```
 
+And monthly mean temperature for just deployment location.
+
+```{r means}
+loc_mmtemp <- sites_temp %>% 
+  #We will two new columns: year and month to calculate monthly means
+  mutate(year = year(time),
+         month = month(time)) %>%
+  #We will now group data by month, year and site
+  group_by(year, month, deployment_location) %>%
+  #Calculating monthly means for temperature at each site
+  summarise(temp_monthly_mean = round(mean(qc_val, na.rm = TRUE), 2),
+            temp_sd = sd(qc_val, na.rm = TRUE),
+            #Total number of observations used in monthly mean calculations
+            tot_obs = n()) %>%
+  #Arranging in chronological order
+  arrange(deployment_location, year, month)
+
+#Checking results
+head(loc_mmtemp)
+```
+
 ## Plotting timeseries
 
 We can now use `ggplot2` to create a plot showing how temperature has changed over time. We will save the plot as a variable so we can save it to our local machine later.
 
-```{r timeseries_plot}
-temp_plot <- sites_mmtemp %>% 
+By deployment location
+
+```{r}
+loc_temp_plot <- loc_mmtemp %>% 
   #Combining year and month columns into one
   mutate(date = ym(paste0(year, "-", month))) %>% 
   #Plotting temperature of y axis and time on x axis. Color data by site.
-  ggplot(aes(x = date, y = temp_monthly_mean, color = site))+
+  ggplot(aes(x = date, y = temp_monthly_mean, color = deployment_location))+
   #Plot data as points and lines
-  geom_point()+
+  #geom_point()+
   geom_line()+
+  geom_ribbon(aes(ymax = temp_monthly_mean + temp_sd, 
+                  ymin = temp_monthly_mean - temp_sd,
+                  fill = deployment_location),
+              alpha = 0.3) +
   #Creating subplots for each site for easy comparison
-  facet_grid(~deployment_location)+
+  facet_grid(deployment_location ~ .)+
   #Removing default grey background
   theme_bw()+
   #Change position of legend
@@ -216,7 +244,7 @@ temp_plot <- sites_mmtemp %>%
   labs(y = expression("Mean monthly temperature  " ( degree~C)))
 
 #Checking plot
-temp_plot
+loc_temp_plot
 ```
 
 ## Read in sea surface temperature (SST) from NOAA Extended Reconstructed SST
